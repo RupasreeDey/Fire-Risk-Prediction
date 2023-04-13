@@ -99,3 +99,37 @@ print("Number of false negatives: ", cm[1,0])
 print("Number of false positives: ", cm[0,1])
 print("Number of true negatives: ", cm[1,1])
 print("Number of true positives: ", cm[0,0])
+
+# print feature_important list
+xgb_clf.fit(X, y)
+
+# Get the feature importance scores
+importance = xgb_clf.feature_importances_
+
+# Normalize the feature importance scores
+importance = importance / np.sum(importance)
+
+'''
+# Print the feature importance list
+for i, score in enumerate(importance):
+    print('Feature %d: %.5f' % (i+1, score))
+'''
+
+feat_imp = list(importance)
+columns = X.columns
+
+# create a DataFrame
+df = pd.DataFrame({'Feature Name': columns})
+
+# create a new DataFrame with the list as a column
+new_df = pd.DataFrame({'Feature Importance': feat_imp})
+
+# merge the two DataFrames
+merged_df = pd.concat([df, new_df], axis=1)
+merged_df.to_csv('Feature Importance List.csv')
+
+# pick the maximum 20 rows based on values in 'Feature Importance'
+Top20_Features = merged_df.nlargest(20, 'Feature Importance')
+
+# print the resulting dataframe
+print(Top20_Features)
