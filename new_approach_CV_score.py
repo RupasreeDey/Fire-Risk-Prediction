@@ -6,32 +6,45 @@ Created on Wed Apr 12 23:20:04 2023
 @author: rupasree
 """
 
+import folium
 import pandas as pd
+import pickle
 from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import train_test_split, cross_val_score, cross_val_predict
 from sklearn.metrics import precision_score, recall_score, f1_score, auc, accuracy_score, confusion_matrix
-from sklearn.metrics import accuracy_score
 from sklearn.utils import shuffle
 import numpy as np
 import xgboost as xgb
+from pandas_profiling import ProfileReport
+
 
 def drop_columns(df, columns):
     df = df.drop(columns, axis=1)
     return df
 
-df_encoded = pd.read_csv('Fire_nonFire_Data.csv')
+def create_profile(df, name):
+    profile = ProfileReport(df, title="Profiling Report")
+    profile.to_file(name)
 
-columns_to_drop = ['Unnamed: 0', 'ADDRESS']
+#df = pd.read_csv('Fire_nonFire_Data.csv')
+df = pd.read_csv('Simple_dataset2.csv')
 
-df_encoded = drop_columns(df_encoded, columns_to_drop)
-df_dummies = pd.get_dummies(df_encoded)
+columns_to_drop = ['Unnamed: 0', 'ADDRESS', 'fire_count']
+
+df = drop_columns(df, columns_to_drop)
+
+df_one = df[df['Incident']==0]
+#create_profile(df_one, 'Fire Instances')
+
+df_dummies = pd.get_dummies(df)
 
 # ensure both train and test set has both(0 and 1) labels
-df_0 = df_dummies[df_dummies['incident']==0]
-df_1 = df_dummies[df_dummies['incident']==1]
+df_0 = df_dummies[df_dummies['Incident']==0]
+df_1 = df_dummies[df_dummies['Incident']==1]
 
-X0_train, X0_test, y0_train, y0_test = train_test_split(df_0.drop('incident', axis=1), df_0['incident'], test_size=0.33, random_state=42)
-X1_train, X1_test, y1_train, y1_test = train_test_split(df_1.drop('incident', axis=1), df_1['incident'], test_size=0.33, random_state=42)
+
+X0_train, X0_test, y0_train, y0_test = train_test_split(df_0.drop('Incident', axis=1), df_0['Incident'], test_size=0.33, random_state=42)
+X1_train, X1_test, y1_train, y1_test = train_test_split(df_1.drop('Incident', axis=1), df_1['Incident'], test_size=0.33, random_state=42)
 
 # merge both labeled instances
 X_train = pd.concat([X0_train, X1_train], ignore_index=True)
@@ -50,15 +63,17 @@ shuffled_train = shuffle(train)
 shuffled_test = shuffle(test)
 
 # separate X, y
-strain_y = shuffled_train['incident']
-strain_X = shuffled_train.drop('incident', axis=1)
+strain_y = shuffled_train['Incident']
+strain_X = shuffled_train.drop('Incident', axis=1)
 
-stest_y = shuffled_test['incident']
-stest_X = shuffled_test.drop('incident', axis=1)
+stest_y = shuffled_test['Incident']
+stest_X = shuffled_test.drop('Incident', axis=1)
 
 # concat train test for prediction in cross validation
-X = pd.concat([strain_X, stest_X], ignore_index=True)
+X_ = pd.concat([strain_X, stest_X], ignore_index=True)
 y = pd.concat([strain_y, stest_y], ignore_index=True)
+
+X = drop_columns(X_, ['LAT', "LON"])
 
 # Specify the number of folds
 n_folds = 5
@@ -103,6 +118,10 @@ print("Number of true positives: ", cm[0,0])
 # print feature_important list
 xgb_clf.fit(X, y)
 
+# save the model to a file
+with open('xgb_model.pkl', 'wb') as f:
+    pickle.dump(xgb_clf, f)
+
 # Get the feature importance scores
 importance = xgb_clf.feature_importances_
 
@@ -133,3 +152,17 @@ Top20_Features = merged_df.nlargest(20, 'Feature Importance')
 
 # print the resulting dataframe
 print(Top20_Features)
+
+# create interactive map
+
+# Create a dataframe with some sample data
+data = {
+    'lat': X_.LAT.values,
+    'long': X_.LON.values,
+    'scores': cv_preds_scores[:, 1].tolist(),
+    'y': y.values,
+    'y_pred': list(y_pred)
+}
+
+df = pd.DataFrame(data)
+df.to_csv('Location_Scores_v2_loc.csv')
